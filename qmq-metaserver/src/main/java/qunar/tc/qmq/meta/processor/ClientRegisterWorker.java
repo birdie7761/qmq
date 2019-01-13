@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Qunar
+ * Copyright 2018 Qunar, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.com.qunar.pay.trade.api.card.service.usercard.UserCardQueryFacade
+ * limitations under the License.
  */
 
 package qunar.tc.qmq.meta.processor;
@@ -26,6 +26,7 @@ import qunar.tc.qmq.meta.BrokerCluster;
 import qunar.tc.qmq.meta.BrokerGroup;
 import qunar.tc.qmq.meta.BrokerState;
 import qunar.tc.qmq.meta.cache.CachedOfflineStateManager;
+import qunar.tc.qmq.meta.route.ReadonlyBrokerGroupManager;
 import qunar.tc.qmq.meta.route.SubjectRouter;
 import qunar.tc.qmq.meta.store.Store;
 import qunar.tc.qmq.meta.utils.ClientLogUtils;
@@ -53,9 +54,11 @@ class ClientRegisterWorker implements ActorSystem.Processor<ClientRegisterProces
     private final ActorSystem actorSystem;
     private final Store store;
     private final CachedOfflineStateManager offlineStateManager;
+    private final ReadonlyBrokerGroupManager readonlyBrokerGroupManager;
 
-    ClientRegisterWorker(final SubjectRouter subjectRouter, final CachedOfflineStateManager offlineStateManager, final Store store) {
+    ClientRegisterWorker(final SubjectRouter subjectRouter, final CachedOfflineStateManager offlineStateManager, final Store store, ReadonlyBrokerGroupManager readonlyBrokerGroupManager) {
         this.subjectRouter = subjectRouter;
+        this.readonlyBrokerGroupManager = readonlyBrokerGroupManager;
         this.actorSystem = new ActorSystem("qmq-meta");
         this.offlineStateManager = offlineStateManager;
         this.store = store;
@@ -84,7 +87,8 @@ class ClientRegisterWorker implements ActorSystem.Processor<ClientRegisterProces
             }
 
             final List<BrokerGroup> brokerGroups = subjectRouter.route(realSubject, request);
-            final List<BrokerGroup> filteredBrokerGroups = filterBrokerGroups(brokerGroups);
+            List<BrokerGroup> removedReadonlyGroups = readonlyBrokerGroupManager.disableReadonlyBrokerGroup(realSubject, request.getClientTypeCode(), brokerGroups);
+            final List<BrokerGroup> filteredBrokerGroups = filterBrokerGroups(removedReadonlyGroups);
             final OnOfflineState clientState = offlineStateManager.queryClientState(request.getClientId(), request.getSubject(), request.getConsumerGroup());
 
             ClientLogUtils.log(realSubject,

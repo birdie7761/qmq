@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Qunar
+ * Copyright 2018 Qunar, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.com.qunar.pay.trade.api.card.service.usercard.UserCardQueryFacade
+ * limitations under the License.
  */
 
 package qunar.tc.qmq.broker;
@@ -35,13 +35,17 @@ public class BrokerGroupInfo {
     private final CircuitBreaker circuitBreaker;
 
     public BrokerGroupInfo(int groupIndex, String groupName, String master, List<String> slaves) {
+        this(groupIndex, groupName, master, slaves, new CircuitBreaker());
+    }
+
+    public BrokerGroupInfo(int groupIndex, String groupName, String master, List<String> slaves, CircuitBreaker circuitBreaker) {
         Preconditions.checkArgument(!Strings.isNullOrEmpty(groupName), "groupName不能是空");
         Preconditions.checkArgument(!Strings.isNullOrEmpty(master), "master不能是空");
         this.groupIndex = groupIndex;
         this.groupName = groupName;
         this.master = master;
         this.slaves = slaves;
-        this.circuitBreaker = new CircuitBreaker();
+        this.circuitBreaker = circuitBreaker;
     }
 
     public int getGroupIndex() {
@@ -78,6 +82,10 @@ public class BrokerGroupInfo {
 
     public static boolean isInvalid(BrokerGroupInfo brokerGroup) {
         return brokerGroup == null || !brokerGroup.isAvailable();
+    }
+
+    public CircuitBreaker getCircuitBreaker() {
+        return circuitBreaker;
     }
 
     @Override

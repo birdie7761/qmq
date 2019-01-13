@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Qunar
+ * Copyright 2018 Qunar, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.com.qunar.pay.trade.api.card.service.usercard.UserCardQueryFacade
+ * limitations under the License.
  */
 
 package qunar.tc.qmq.broker.impl;
@@ -20,12 +20,15 @@ import com.google.common.eventbus.Subscribe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qunar.tc.qmq.broker.BrokerClusterInfo;
+import qunar.tc.qmq.broker.BrokerGroupInfo;
 import qunar.tc.qmq.broker.BrokerService;
 import qunar.tc.qmq.common.ClientType;
 import qunar.tc.qmq.common.MapKeyBuilder;
 import qunar.tc.qmq.metainfoclient.MetaInfo;
 import qunar.tc.qmq.metainfoclient.MetaInfoService;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
@@ -50,9 +53,12 @@ public class BrokerServiceImpl implements BrokerService {
 
     @Subscribe
     public void onReceiveMetaInfo(MetaInfo metaInfo) {
-        LOGGER.debug("BrokerServiceOnReceiveMetaInfo", "receive MetaInfo: {}", metaInfo);
         String key = MapKeyBuilder.buildMetaInfoKey(metaInfo.getClientType(), metaInfo.getSubject());
         ClusterFuture future = clusterMap.get(key);
+        if (isEmptyCluster(metaInfo)) {
+            logMetaInfo(metaInfo, future);
+            return;
+        }
         if (future == null) {
             future = new ClusterFuture(metaInfo.getClusterInfo());
             ClusterFuture oldFuture = clusterMap.putIfAbsent(key, future);
@@ -60,8 +66,68 @@ public class BrokerServiceImpl implements BrokerService {
                 oldFuture.set(metaInfo.getClusterInfo());
             }
         } else {
-            future.set(metaInfo.getClusterInfo());
+            updateOnDemand(future, metaInfo.getClusterInfo());
         }
+    }
+
+    private void updateOnDemand(ClusterFuture future, BrokerClusterInfo clusterInfo) {
+        BrokerClusterInfo oldClusterInfo = future.cluster.get();
+        if (oldClusterInfo == null) {
+            future.set(clusterInfo);
+            return;
+        }
+
+        if (isEquals(oldClusterInfo, clusterInfo)) {
+            return;
+        }
+
+        List<BrokerGroupInfo> groups = clusterInfo.getGroups();
+        List<BrokerGroupInfo> updated = new ArrayList<>(groups.size());
+        for (BrokerGroupInfo group : groups) {
+            BrokerGroupInfo oldGroup = oldClusterInfo.getGroupByName(group.getGroupName());
+            if (oldGroup == null) {
+                updated.add(group);
+                continue;
+            }
+
+            if (oldGroup.getMaster().equals(group.getMaster())) {
+                BrokerGroupInfo copy = new BrokerGroupInfo(group.getGroupIndex(),
+                        group.getGroupName(), group.getMaster(), group.getSlaves(), oldGroup.getCircuitBreaker());
+                updated.add(copy);
+                continue;
+            }
+
+            updated.add(group);
+        }
+
+        BrokerClusterInfo updatedCluster = new BrokerClusterInfo(updated);
+        future.set(updatedCluster);
+    }
+
+    private boolean isEquals(BrokerClusterInfo oldClusterInfo, BrokerClusterInfo clusterInfo) {
+        List<BrokerGroupInfo> groups = clusterInfo.getGroups();
+        if (groups.size() != oldClusterInfo.getGroups().size()) return false;
+
+        for (BrokerGroupInfo group : groups) {
+            BrokerGroupInfo oldGroup = oldClusterInfo.getGroupByName(group.getGroupName());
+            if (oldGroup == null) return false;
+
+            if (!oldGroup.getMaster().equals(group.getMaster())) return false;
+        }
+        return true;
+    }
+
+    private void logMetaInfo(MetaInfo metaInfo, ClusterFuture future) {
+        if (future == null || future.cluster.get() == null) {
+            LOGGER.error("meta server return empty broker, will retry in a few seconds. subject={}, client={}", metaInfo.getSubject(), metaInfo.getClientType());
+        } else {
+            LOGGER.info("meta server return empty broker, will retry in a few seconds. subject={}, client={}", metaInfo.getSubject(), metaInfo.getClientType());
+        }
+    }
+
+    private boolean isEmptyCluster(MetaInfo metaInfo) {
+        return metaInfo.getClientType() != ClientType.CONSUMER
+                && metaInfo.getClusterInfo().getGroups().isEmpty();
     }
 
     @Override

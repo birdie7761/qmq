@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Qunar
+ * Copyright 2018 Qunar, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.com.qunar.pay.trade.api.card.service.usercard.UserCardQueryFacade
+ * limitations under the License.
  */
 
 package qunar.tc.qmq.store;
@@ -33,7 +33,7 @@ import java.nio.charset.StandardCharsets;
 public class MessageLog implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(MessageLog.class);
 
-    public static final int PER_SEGMENT_FILE_SIZE = 100 * 1024 * 1024;
+    private static final int PER_SEGMENT_FILE_SIZE = 1024 * 1024 * 1024;
 
     //4 bytes magic code + 1 byte attribute + 8 bytes timestamp
     public static final int MIN_RECORD_BYTES = 13;
@@ -233,7 +233,7 @@ public class MessageLog implements AutoCloseable {
     }
 
     private class RawMessageAppender implements MessageAppender<RawMessage, MessageSequence> {
-        private static final int MAX_BYTES = 1024 * 1024 * 50; // 50M
+        private static final int MAX_BYTES = 1024;
 
         private static final byte ATTR_EMPTY_RECORD = 1;
         private static final byte ATTR_MESSAGE_RECORD = 0;
@@ -260,7 +260,8 @@ public class MessageLog implements AutoCloseable {
             } else {
                 final long sequence = consumerLogManager.getOffsetOrDefault(subject, 0);
 
-                workingBuffer.limit(recordSize);
+                int headerSize = recordSize - message.getBodySize();
+                workingBuffer.limit(headerSize);
                 workingBuffer.putInt(MagicCode.MESSAGE_LOG_MAGIC_V3);
                 workingBuffer.put(ATTR_MESSAGE_RECORD);
                 workingBuffer.putLong(System.currentTimeMillis());
@@ -269,12 +270,12 @@ public class MessageLog implements AutoCloseable {
                 workingBuffer.put(subjectBytes);
                 workingBuffer.putLong(message.getHeader().getBodyCrc());
                 workingBuffer.putInt(message.getBodySize());
-                workingBuffer.put(message.getBody().nioBuffer());
-                targetBuffer.put(workingBuffer.array(), 0, recordSize);
+                targetBuffer.put(workingBuffer.array(), 0, headerSize);
+                targetBuffer.put(message.getBody().nioBuffer());
 
                 consumerLogManager.incOffset(subject);
 
-                final long payloadOffset = wroteOffset + recordSize - message.getBodySize();
+                final long payloadOffset = wroteOffset + headerSize;
                 return new AppendMessageResult<>(AppendMessageStatus.SUCCESS, wroteOffset, recordSize, new MessageSequence(sequence, payloadOffset));
             }
         }

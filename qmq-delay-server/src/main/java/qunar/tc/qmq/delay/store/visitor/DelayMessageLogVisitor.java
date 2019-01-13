@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Qunar
+ * Copyright 2018 Qunar, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.com.qunar.pay.trade.api.card.service.usercard.UserCardQueryFacade
+ * limitations under the License.
  */
 
 package qunar.tc.qmq.delay.store.visitor;
@@ -38,7 +38,8 @@ import static qunar.tc.qmq.delay.store.model.MessageLogAttrEnum.ATTR_SKIP_RECORD
 public class DelayMessageLogVisitor implements LogVisitor<LogRecord> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DelayMessageLogVisitor.class);
 
-    private static final EmptyLogRecord EMPTY_LOG_RECORD = new EmptyLogRecord();
+    public static final EmptyLogRecord EMPTY_LOG_RECORD = new EmptyLogRecord();
+
     private static final int MIN_RECORD_BYTES = 13;
 
     private final AtomicInteger visitedBufferSize = new AtomicInteger(0);
@@ -104,7 +105,7 @@ public class DelayMessageLogVisitor implements LogVisitor<LogRecord> {
         // magic
         final int magic = buffer.getInt();
         if (!MagicCodeSupport.isValidMessageLogMagicCode(magic)) {
-//            visitedBufferSize.set(currentBuffer.getSize());
+            visitedBufferSize.set(currentBuffer.getSize());
             return Optional.of(EMPTY_LOG_RECORD);
         }
 

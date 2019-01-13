@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Qunar
+ * Copyright 2018 Qunar, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.com.qunar.pay.trade.api.card.service.usercard.UserCardQueryFacade
+ * limitations under the License.
  */
 package qunar.tc.qmq.producer;
 
@@ -22,12 +22,14 @@ import io.opentracing.util.GlobalTracer;
 import qunar.tc.qmq.Message;
 import qunar.tc.qmq.MessageProducer;
 import qunar.tc.qmq.MessageSendStateListener;
+import qunar.tc.qmq.TransactionProvider;
 import qunar.tc.qmq.base.BaseMessage;
 import qunar.tc.qmq.common.ClientIdProvider;
 import qunar.tc.qmq.common.ClientIdProviderFactory;
 import qunar.tc.qmq.producer.idgenerator.IdGenerator;
 import qunar.tc.qmq.producer.idgenerator.TimestampAndHostIdGenerator;
 import qunar.tc.qmq.producer.sender.NettyRouterManager;
+import qunar.tc.qmq.producer.tx.MessageTracker;
 import qunar.tc.qmq.tracing.TraceUtil;
 
 import javax.annotation.PostConstruct;
@@ -54,6 +56,8 @@ public class MessageProducerProvider implements MessageProducer {
 
     private String appCode;
     private String metaServer;
+
+    private MessageTracker messageTracker;
 
     /**
      * 自动路由机房
@@ -100,8 +104,20 @@ public class MessageProducerProvider implements MessageProducer {
                 .withTag("subject", message.getSubject())
                 .withTag("messageId", message.getMessageId())
                 .startActive(true)) {
+            if (messageTracker == null) {
+                message.setDurable(false);
+            }
+
             ProduceMessageImpl pm = initProduceMessage(message, listener);
-            pm.send();
+            if (!message.isDurable()) {
+                pm.send();
+                return;
+            }
+
+            if (!messageTracker.trackInTransaction(pm)) {
+                pm.send();
+            }
+
         }
     }
 
@@ -124,7 +140,7 @@ public class MessageProducerProvider implements MessageProducer {
     }
 
     /**
-     * 内存发送队列最大值，默认值 @see QUEUE_MEM_SIZE
+     * 内存发送队列最大值，默认值 10000
      *
      * @param maxQueueSize 内存队列大小
      */
@@ -133,7 +149,7 @@ public class MessageProducerProvider implements MessageProducer {
     }
 
     /**
-     * 发送线程数 @see SEND_THREADS
+     * 发送线程数，默认3个线程
      *
      * @param sendThreads
      */
@@ -142,7 +158,7 @@ public class MessageProducerProvider implements MessageProducer {
     }
 
     /**
-     * 批量发送，每批量大小 @see SEND_BATCH
+     * 批量发送，每批量大小，默认值30
      *
      * @param sendBatch
      */
@@ -151,9 +167,9 @@ public class MessageProducerProvider implements MessageProducer {
     }
 
     /**
-     * 发送失败重试次数
+     * 发送失败重试次数，默认值10
      *
-     * @param sendTryCount @see SEND_TRY_COUNT
+     * @param sendTryCount
      */
     public void setSendTryCount(int sendTryCount) {
         configs.setSendTryCount(sendTryCount);
@@ -174,10 +190,15 @@ public class MessageProducerProvider implements MessageProducer {
 
     /**
      * 用于发现meta server集群的地址
+     * 格式: http://<meta server address>/meta/address
      *
      * @param metaServer
      */
     public void setMetaServer(String metaServer) {
         this.metaServer = metaServer;
+    }
+
+    public void setTransactionProvider(TransactionProvider transactionProvider) {
+        this.messageTracker = new MessageTracker(transactionProvider);
     }
 }
