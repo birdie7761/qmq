@@ -25,6 +25,7 @@ import qunar.tc.qmq.utils.Crc32;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * @author keli.wang
@@ -251,11 +252,15 @@ public class MessageLog implements AutoCloseable {
             final int recordSize = recordSize(subjectBytes.length, message.getBodySize());
 
             if (recordSize != freeSpace && recordSize + MIN_RECORD_BYTES > freeSpace) {
-                workingBuffer.limit(freeSpace);
+                workingBuffer.limit(MIN_RECORD_BYTES);
                 workingBuffer.putInt(MagicCode.MESSAGE_LOG_MAGIC_V3);
                 workingBuffer.put(ATTR_EMPTY_RECORD);
                 workingBuffer.putLong(System.currentTimeMillis());
-                targetBuffer.put(workingBuffer.array(), 0, freeSpace);
+                targetBuffer.put(workingBuffer.array(), 0, MIN_RECORD_BYTES);
+                int fillZeroLen = freeSpace - MIN_RECORD_BYTES;
+                if (fillZeroLen > 0) {
+                    targetBuffer.put(fillZero(fillZeroLen));
+                }
                 return new AppendMessageResult<>(AppendMessageStatus.END_OF_FILE, wroteOffset, freeSpace, null);
             } else {
                 final long sequence = consumerLogManager.getOffsetOrDefault(subject, 0);
@@ -278,6 +283,12 @@ public class MessageLog implements AutoCloseable {
                 final long payloadOffset = wroteOffset + headerSize;
                 return new AppendMessageResult<>(AppendMessageStatus.SUCCESS, wroteOffset, recordSize, new MessageSequence(sequence, payloadOffset));
             }
+        }
+
+        private byte[] fillZero(int len) {
+            byte[] zero = new byte[len];
+            Arrays.fill(zero, (byte) 0);
+            return zero;
         }
     }
 }

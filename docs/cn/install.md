@@ -7,20 +7,6 @@
 ## 下载
 我们推荐你直接下载编译好的文件来运行应用。在github上可以[下载](https://github.com/qunarcorp/qmq/releases)
 
-## 从源码安装
-进入代码目录运行下面的命令:
-```
-mvn clean package -am -pl qmq-dist -Pdist
-```
-在qmq-dist/target目录下即可得到编译输出，包含以下部分:
-
-```
-conf -- 配置文件目录
-bin  -- 启动脚本目录
-lib  -- jar包所在目录
-sql  -- 初始化db的目录
-```
-
 ## Linux配置
 ### 修改文件句柄
 QMQ需要打开大量的文件用于持久化消息等数据，如果你的集群需要承载大量消息主题请修改该参数
@@ -169,7 +155,7 @@ sync.batch.size=100000
 message.sync.timeout.ms=10
 ```
 ## 启动
-在启动broker之前，请先将其在metaserver里注册，broker启动时候需要从metaserver获取元数据信息。运行bin目录的tools.sh(windows平台使用tools.cmd\，执行以下命令:
+在启动broker之前，请先将其在metaserver里注册，broker启动时候需要从metaserver获取元数据信息。运行bin目录的tools.sh(windows平台使用tools.cmd)，执行以下命令:
 
 ```
 # 注册实时server的master节点
@@ -183,9 +169,9 @@ $ tools.sh AddBroker --metaserver=<metaserver address> --token=<token> --brokerG
 
 * metaserver address指的是ip:port,port默认是8080
 * token即metaserver的配置valid-api-tokens.properties里任何一项
-* brokerGroup 这一组的名字，每一组分为一主一从(默认可以不配置slave，但是在生产环境强烈建议配置slave，brokerGroup必须全局唯一，主从两个节点的brokerGroup相同)
+* brokerGroup 这一组的名字，每一组分为一主一从(默认可以不配置slave，但是在生产环境强烈建议配置slave，brokerGroup必须全局唯一，主从两个节点的brokerGroup必须相同，实时Server和延时Server的brokerGroup必须不能相同)
 * role 角色 0 - master, 1 - slave, 5 - delay master, 6 - delay slave
-* hostname 机器的主机名，注意必须是真实有效的主机名。linux/mac使用hostname命令查看
+* hostname 机器的主机名，注意必须是真实有效的主机名，可以使用hostname命令查看主机名
 * ip 机器的ip地址
 * servePort 接收消息的端口
 * syncPort 主从同步端口
@@ -271,9 +257,9 @@ $ tools.sh AddBroker --metaserver=<metaserver address> --token=<token> --brokerG
 
 * metaserver address指的是ip:port,port默认是8080
 * token即metaserver的配置valid-api-tokens.properties里任何一项
-* brokerGroup 这一组的名字，每一组分为一主一从(默认可以不配置slave，但是在生产环境强烈建议配置slave，brokerGroup必须全局唯一，主从两个节点的brokerGroup相同)
+* brokerGroup 这一组的名字，每一组分为一主一从(默认可以不配置slave，但是在生产环境强烈建议配置slave，brokerGroup必须全局唯一，主从两个节点的brokerGroup必须相同，实时Server和延时Server的brokerGroup必须不能相同)
 * role 角色 0 - master, 1 - slave, 5 - delay master, 6 - delay slave
-* hostname 机器的主机名，注意必须是真实有效的主机名。linux/mac使用hostname命令查看
+* hostname 机器的主机名，注意必须是真实有效的主机名，可以使用hostname命令查看主机名
 * ip 机器的ip地址
 * servePort 接收消息的端口
 * syncPort 主从同步端口
@@ -297,6 +283,64 @@ delay.sh stop
 ```
 Ctrl + C
 ```
+
+## Watchdog
+Watchdog是在使用事务消息时的补偿服务，用于监控事务消息表中的未发送消息进行补偿，确保所有消息都发送成功。
+
+### 最低配置
+JDK 1.8
+
+-Xmx2G -Xms2G
+
+### 配置文件
+*watchdog.properties*
+```
+# 必须 给watchdog分配唯一的应用标识
+appCode=watchdog
+
+# 必须 meta server address
+meta.server.endpoint=http://<meta server host>:<port>/meta/address
+
+# 可选，可以部署多个watchdog集群，namespace即集群名称，该名称需要与db注册时候的room参数相同
+namespace=default
+```
+
+## 启动
+使用bin目录的watchdog.sh(windows平台上请使用watchdog.cmd)启动
+### Linux
+```
+$ watchdog.sh start
+```
+### Windows
+```
+> watchdog.cmd
+```
+## 停止
+### Linux
+```
+watchdog.sh stop
+```
+### Windows
+```
+Ctrl + C
+```
+
+## 从源码安装
+我们建议大家直接下载我们编译好的包进行安装，但是你也可以进入代码目录运行下面的命令:
+```
+mvn clean package -am -pl qmq-dist -Pdist
+```
+在qmq-dist/target目录下即可得到编译输出，包含以下部分:
+
+```
+conf -- 配置文件目录
+bin  -- 启动脚本目录
+lib  -- jar包所在目录
+sql  -- 初始化db的目录
+```
+
+注意，运行的时候请进入target目录下编译输出里的bin下运行，而不是在源代码目录的qmq-dist/bin下运行
+
 
 [上一页](quickstart.md)
 [回目录](../../README.md)

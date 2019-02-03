@@ -1,7 +1,7 @@
 # QMQ
 
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.qunar.qmq/qmq/badge.svg)](http://search.maven.org/#search%7Cga%7C1%7Ccom.qunar.qmq)
-[![GitHub release](https://img.shields.io/badge/release-download-orange.svg)](https://github.com/qunarcorp/qmq/releases)
+[![GitHub release](https://img.shields.io/github/release/qunarcorp/qmq.svg)](https://github.com/qunarcorp/qmq/releases)
 [![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
 
 QMQ是去哪儿网内部广泛使用的消息中间件，自2012年诞生以来在去哪儿网所有业务场景中广泛的应用，包括跟交易息息相关的订单场景；
@@ -14,6 +14,7 @@ QMQ是去哪儿网内部广泛使用的消息中间件，自2012年诞生以来�
 * 基于Tag的服务端过滤
 * Consumer端幂等处理支持
 * Consumer端filter
+* 消费端支持按条ack消息
 * 死信消息
 * 结合Spring annotation使用的简单API
 * 提供丰富的监控指标
@@ -24,6 +25,7 @@ QMQ是去哪儿网内部广泛使用的消息中间件，自2012年诞生以来�
 * Java Client, .NET Client
 * 消息投递轨迹(即将开源)
 * 历史消息的自动备份(即将开源)
+* 有序消息(即将开源)
 
 # JDK最低版本要求
 * Client: 1.7及其以上版本
@@ -40,7 +42,7 @@ qmq的客户端已经发布到maven中央仓库，可以通过下面的方式获
 ```
 
 # 快速开始
-你可以通过[设计背景](docs/cn/design.md)了解设计QMQ的初衷和她与其他消息队列的不同。
+你可以通过[设计背景](docs/cn/design.md)了解设计QMQ的初衷和它与其他消息队列的不同。
 阅读[架构概览](docs/cn/arch.md)了解QMQ的存储模型
 
 ## 文档
@@ -53,8 +55,10 @@ qmq的客户端已经发布到maven中央仓库，可以通过下面的方式获
 * [监控](docs/cn/monitor.md)
 * [Trace](docs/cn/trace.md)
 * [发送消息](docs/cn/producer.md)
+* [在Junit Test中如何发送消息](docs/cn/unittest.md)
 * [事务消息](docs/cn/transaction.md)
 * [消费消息](docs/cn/consumer.md)
+* [幂等Exactly once消费](docs/cn/exactlyonce.md)
 * [.NET客户端](docs/cn/net.md)
 * [延时/定时消息](docs/cn/delay.md)
 * [服务端tag过滤](docs/cn/tag.md)
@@ -64,6 +68,7 @@ qmq的客户端已经发布到maven中央仓库，可以通过下面的方式获
 * [开源协议](docs/cn/opensource.md)
 * [技术支持](docs/cn/support.md)
 * [分享](docs/cn/share.md)
+* [FAQ](docs/cn/faq.md)
 
 # 技术支持
 
@@ -83,3 +88,5 @@ qmq的客户端已经发布到maven中央仓库，可以通过下面的方式获
 ![去哪儿](docs/images/logo/qunar.png)
 ![携程](docs/images/logo/ctrip.png)
 ![IYMedia](docs/images/logo/iymedia.png)
+![便利蜂](docs/images/logo/bianlifeng.png)
+![金汇金融](docs/images/logo/jinhui365.png)

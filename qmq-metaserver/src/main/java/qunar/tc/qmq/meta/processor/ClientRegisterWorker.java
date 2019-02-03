@@ -59,13 +59,13 @@ class ClientRegisterWorker implements ActorSystem.Processor<ClientRegisterProces
     ClientRegisterWorker(final SubjectRouter subjectRouter, final CachedOfflineStateManager offlineStateManager, final Store store, ReadonlyBrokerGroupManager readonlyBrokerGroupManager) {
         this.subjectRouter = subjectRouter;
         this.readonlyBrokerGroupManager = readonlyBrokerGroupManager;
-        this.actorSystem = new ActorSystem("qmq-meta");
+        this.actorSystem = new ActorSystem("qmq_meta");
         this.offlineStateManager = offlineStateManager;
         this.store = store;
     }
 
     void register(ClientRegisterProcessor.ClientRegisterMessage message) {
-        actorSystem.dispatch("client-register-" + message.getMetaInfoRequest().getSubject(), message, this);
+        actorSystem.dispatch("client_register_" + message.getMetaInfoRequest().getSubject(), message, this);
     }
 
     @Override
@@ -133,18 +133,16 @@ class ClientRegisterWorker implements ActorSystem.Processor<ClientRegisterProces
 
     private void writeResponse(final ClientRegisterProcessor.ClientRegisterMessage message, final MetaInfoResponse response) {
         final RemotingHeader header = message.getHeader();
-        final MetaInfoResponsePayloadHolder payloadHolder = new MetaInfoResponsePayloadHolder(response, header.getVersion());
+        final MetaInfoResponsePayloadHolder payloadHolder = new MetaInfoResponsePayloadHolder(response);
         final Datagram datagram = RemotingBuilder.buildResponseDatagram(CommandCode.SUCCESS, header, payloadHolder);
         message.getCtx().writeAndFlush(datagram);
     }
 
     private static class MetaInfoResponsePayloadHolder implements PayloadHolder {
         private final MetaInfoResponse response;
-        private final short version;
 
-        MetaInfoResponsePayloadHolder(MetaInfoResponse response, short version) {
+        MetaInfoResponsePayloadHolder(MetaInfoResponse response) {
             this.response = response;
-            this.version = version;
         }
 
         @Override
