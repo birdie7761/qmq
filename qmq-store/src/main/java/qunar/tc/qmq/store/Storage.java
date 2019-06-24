@@ -20,6 +20,7 @@ import com.google.common.collect.Table;
 import qunar.tc.qmq.base.RawMessage;
 import qunar.tc.qmq.common.Disposable;
 import qunar.tc.qmq.store.action.ActionEvent;
+import qunar.tc.qmq.store.buffer.SegmentBuffer;
 import qunar.tc.qmq.store.event.FixedExecOrderEventBus;
 
 import java.nio.ByteBuffer;
@@ -64,7 +65,7 @@ public interface Storage extends Disposable {
 
     ConsumerGroupProgress getConsumerGroupProgress(final String subject, final String group);
 
-    Collection<ConsumerGroupProgress> allConsumerGroupProgresses();
+    Table<String, String, ConsumerGroupProgress> allConsumerGroupProgresses();
 
     long getMaxPulledMessageSequence(String subject, String group);
 
@@ -85,6 +86,8 @@ public interface Storage extends Disposable {
     boolean appendMessageLogData(final long startOffset, final ByteBuffer data);
 
     boolean appendActionLogData(final long startOffset, final ByteBuffer data);
+
+    MessageLogRecordVisitor newMessageLogVisitor(final long startOffset);
 
     void disableLagMonitor(String subject, String group);
 

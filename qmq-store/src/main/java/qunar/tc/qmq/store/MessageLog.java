@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qunar.tc.qmq.base.RawMessage;
 import qunar.tc.qmq.monitor.QMon;
+import qunar.tc.qmq.store.buffer.SegmentBuffer;
 import qunar.tc.qmq.utils.Crc32;
 
 import java.io.File;
@@ -31,10 +32,14 @@ import java.util.Arrays;
  * @author keli.wang
  * @since 2017/7/4
  */
-public class MessageLog implements AutoCloseable {
+public class MessageLog implements AutoCloseable, Visitable<MessageLogRecord> {
     private static final Logger LOG = LoggerFactory.getLogger(MessageLog.class);
 
-    private static final int PER_SEGMENT_FILE_SIZE = 1024 * 1024 * 1024;
+    static final int PER_SEGMENT_FILE_SIZE = 1024 * 1024 * 1024;
+
+    static final byte ATTR_BLANK_RECORD = 2;
+    static final byte ATTR_EMPTY_RECORD = 1;
+    static final byte ATTR_MESSAGE_RECORD = 0;
 
     //4 bytes magic code + 1 byte attribute + 8 bytes timestamp
     public static final int MIN_RECORD_BYTES = 13;
@@ -47,7 +52,7 @@ public class MessageLog implements AutoCloseable {
     public MessageLog(final StorageConfig config, final ConsumerLogManager consumerLogManager) {
         this.config = config;
         this.consumerLogManager = consumerLogManager;
-        this.logManager = new LogManager(new File(config.getMessageLogStorePath()), PER_SEGMENT_FILE_SIZE, config, new MessageLogSegmentValidator());
+        this.logManager = new LogManager(new File(config.getMessageLogStorePath()), PER_SEGMENT_FILE_SIZE, new MessageLogSegmentValidator());
         consumerLogManager.adjustConsumerLogMinOffset(logManager.firstSegment());
     }
 
@@ -63,10 +68,12 @@ public class MessageLog implements AutoCloseable {
                 + (payloadSize > 0 ? payloadSize : 0);
     }
 
+    @Override
     public long getMaxOffset() {
         return logManager.getMaxOffset();
     }
 
+    @Override
     public long getMinOffset() {
         return logManager.getMinOffset();
     }
@@ -108,11 +115,8 @@ public class MessageLog implements AutoCloseable {
 
         final int payloadSize = wroteBytes - headerSize;
         final int pos = (int) (payloadOffset % PER_SEGMENT_FILE_SIZE);
-        final SegmentBuffer result = segment.selectSegmentBuffer(pos, payloadSize);
-        if (result == null) return null;
 
-        result.setWroteOffset(wroteOffset);
-        return result;
+        return segment.selectSegmentBuffer(pos, payloadSize);
     }
 
     public SegmentBuffer getMessageData(final long offset) {
@@ -157,7 +161,7 @@ public class MessageLog implements AutoCloseable {
     }
 
     public void clean() {
-        logManager.deleteExpiredSegments(config.getMessageLogRetentionMs(), segment -> {
+        logManager.deleteExpiredSegments(config.getMessageLogRetentionMs(), (logManager, segment) -> {
             consumerLogManager.adjustConsumerLogMinOffset(logManager.firstSegment());
 
             final String fileName = StoreUtils.offsetFileNameForSegment(segment);
@@ -173,8 +177,9 @@ public class MessageLog implements AutoCloseable {
         });
     }
 
-    public MessageLogMetaVisitor newVisitor(long iterateFrom) {
-        return new MessageLogMetaVisitor(logManager, iterateFrom);
+    @Override
+    public MessageLogRecordVisitor newVisitor(long iterateFrom) {
+        return new MessageLogRecordVisitor(logManager, iterateFrom);
     }
 
     private static class MessageLogSegmentValidator implements LogSegmentValidator {
@@ -208,11 +213,11 @@ public class MessageLog implements AutoCloseable {
 
             final byte attributes = buffer.get();
             buffer.getLong();
-            if (attributes == 2) {
+            if (attributes == ATTR_BLANK_RECORD) {
                 return buffer.getInt();
-            } else if (attributes == 1) {
+            } else if (attributes == ATTR_EMPTY_RECORD) {
                 return 0;
-            } else if (attributes == 0) {
+            } else if (attributes == ATTR_MESSAGE_RECORD) {
                 buffer.getLong();
                 final short subjectSize = buffer.getShort();
                 buffer.position(buffer.position() + subjectSize);

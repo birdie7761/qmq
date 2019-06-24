@@ -26,6 +26,7 @@ import qunar.tc.qmq.delay.store.model.RawMessageExtend;
 import qunar.tc.qmq.delay.store.visitor.DelayMessageLogVisitor;
 import qunar.tc.qmq.delay.store.visitor.LogVisitor;
 import qunar.tc.qmq.store.*;
+import qunar.tc.qmq.store.buffer.SegmentBuffer;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -57,7 +58,6 @@ public class MessageSegmentContainer implements SegmentContainer<AppendMessageRe
         this.messageAppender = new MessageSegmentContainer.DelayRawMessageAppender();
         this.logManager = new LogManager(new File(config.getMessageLogStorePath())
                 , config.getMessageLogSegmentFileSize()
-                , new StorageConfigImpl(config.getConfig())
                 , new MessageLogSegmentValidator());
         recoverSequence();
     }

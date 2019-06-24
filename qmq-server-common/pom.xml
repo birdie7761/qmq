@@ -5,7 +5,7 @@
     <parent>
         <artifactId>qmq-parent</artifactId>
         <groupId>com.qunar.qmq</groupId>
-        <version>1.1.3.5</version>
+        <version>1.1.4</version>
     </parent>
 
     <artifactId>qmq-server-common</artifactId>
@@ -51,6 +51,20 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
         </dependency>
     </dependencies>
 </project>

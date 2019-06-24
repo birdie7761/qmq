@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import qunar.tc.qmq.*;
 import qunar.tc.qmq.common.ClientIdProvider;
 import qunar.tc.qmq.common.ClientIdProviderFactory;
+import qunar.tc.qmq.common.EnvProvider;
 import qunar.tc.qmq.config.NettyClientConfigManager;
 import qunar.tc.qmq.consumer.handler.MessageDistributor;
 import qunar.tc.qmq.consumer.pull.PullConsumerFactory;
@@ -35,10 +36,6 @@ import java.util.concurrent.Executor;
  * @date 2012-12-28
  */
 public class MessageConsumerProvider implements MessageConsumer {
-
-    private static final int MAX_CONSUMER_GROUP_LEN = 50;
-    private static final int MAX_PREFIX_LEN = 100;
-
     private MessageDistributor distributor;
 
     private final PullConsumerFactory pullConsumerFactory;
@@ -46,11 +43,17 @@ public class MessageConsumerProvider implements MessageConsumer {
     private volatile boolean inited = false;
 
     private ClientIdProvider clientIdProvider;
+    private EnvProvider envProvider;
 
     private final PullRegister pullRegister;
     private String appCode;
     private String metaServer;
     private int destroyWaitInSeconds;
+
+    private int maxSubjectLen = 100;
+    private int maxConsumerGroupLen = 100;
+
+    private boolean autoOnline = true;
 
     public MessageConsumerProvider() {
         this.clientIdProvider = ClientIdProviderFactory.createDefault();
@@ -73,13 +76,15 @@ public class MessageConsumerProvider implements MessageConsumer {
             String clientId = this.clientIdProvider.get();
             this.pullRegister.setDestroyWaitInSeconds(destroyWaitInSeconds);
             this.pullRegister.setMetaServer(metaServer);
+            this.pullRegister.setEnvProvider(envProvider);
             this.pullRegister.setClientId(clientId);
+            this.pullRegister.setAppCode(appCode);
             this.pullRegister.init();
 
             distributor = new MessageDistributor(pullRegister);
             distributor.setClientId(clientId);
 
-            pullRegister.setAutoOnline(true);
+            pullRegister.setAutoOnline(autoOnline);
             inited = true;
         }
     }
@@ -92,8 +97,8 @@ public class MessageConsumerProvider implements MessageConsumer {
     @Override
     public ListenerHolder addListener(String subject, String consumerGroup, MessageListener listener, Executor executor, SubscribeParam subscribeParam) {
         init();
-        Preconditions.checkArgument(subject != null && subject.length() <= MAX_PREFIX_LEN, "subjectPrefix长度不允许超过" + MAX_PREFIX_LEN + "个字符");
-        Preconditions.checkArgument(consumerGroup == null || consumerGroup.length() <= MAX_CONSUMER_GROUP_LEN, "consumerGroup长度不允许超过" + MAX_CONSUMER_GROUP_LEN + "个字符");
+        Preconditions.checkArgument(subject != null && subject.length() <= maxSubjectLen, "subject长度不允许超过" + maxSubjectLen + "个字符");
+        Preconditions.checkArgument(consumerGroup == null || consumerGroup.length() <= maxConsumerGroupLen, "consumerGroup长度不允许超过" + maxConsumerGroupLen + "个字符");
 
         Preconditions.checkArgument(!subject.contains("${"), "请确保subject已经正确解析: " + subject);
         Preconditions.checkArgument(consumerGroup == null || !consumerGroup.contains("${"), "请确保consumerGroup已经正确解析: " + consumerGroup);
@@ -136,6 +141,16 @@ public class MessageConsumerProvider implements MessageConsumer {
     }
 
     /**
+     * QMQ提供环境隔离的功能，允许将producer的环境P和consumer的环境C绑定到一起，绑定之后，C环境的consumer只会收到P环境的producer发出的消息。
+     *
+     * @param envProvider 当前client环境provider
+     * @see qunar.tc.qmq.common.EnvProvider
+     */
+    public void setEnvProvider(EnvProvider envProvider) {
+        this.envProvider = envProvider;
+    }
+
+    /**
      * 为了方便维护应用与消息主题之间的关系，每个应用提供一个唯一的标识
      *
      * @param appCode
@@ -156,6 +171,26 @@ public class MessageConsumerProvider implements MessageConsumer {
 
     public void setDestroyWaitInSeconds(int destroyWaitInSeconds) {
         this.destroyWaitInSeconds = destroyWaitInSeconds;
+    }
+
+    public void setAutoOnline(boolean autoOnline){
+        this.autoOnline = autoOnline;
+    }
+
+    public void online() {
+        this.pullRegister.online();
+    }
+
+    public void offline() {
+        this.pullRegister.offline();
+    }
+
+    public void setMaxConsumerGroupLen(int maxConsumerGroupLen) {
+        this.maxConsumerGroupLen = maxConsumerGroupLen;
+    }
+
+    public void setMaxSubjectLen(int maxSubjectLen) {
+        this.maxSubjectLen = maxSubjectLen;
     }
 
     @PreDestroy
