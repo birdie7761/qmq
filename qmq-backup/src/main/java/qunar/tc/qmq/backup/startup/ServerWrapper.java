@@ -16,6 +16,15 @@
 
 package qunar.tc.qmq.backup.startup;
 
+import static qunar.tc.qmq.backup.service.DicService.SIX_DIGIT_FORMAT_PATTERN;
+import static qunar.tc.qmq.constants.BrokerConstants.DEFAULT_PORT;
+import static qunar.tc.qmq.constants.BrokerConstants.META_SERVER_ENDPOINT;
+import static qunar.tc.qmq.constants.BrokerConstants.PORT_CONFIG;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
@@ -24,9 +33,27 @@ import org.slf4j.LoggerFactory;
 import qunar.tc.qmq.backup.base.ActionRecord;
 import qunar.tc.qmq.backup.config.BackupConfig;
 import qunar.tc.qmq.backup.config.DefaultBackupConfig;
-import qunar.tc.qmq.backup.service.*;
-import qunar.tc.qmq.backup.service.impl.*;
-import qunar.tc.qmq.backup.store.*;
+import qunar.tc.qmq.backup.service.BackupKeyGenerator;
+import qunar.tc.qmq.backup.service.BatchBackup;
+import qunar.tc.qmq.backup.service.BatchBackupManager;
+import qunar.tc.qmq.backup.service.DicService;
+import qunar.tc.qmq.backup.service.MessageService;
+import qunar.tc.qmq.backup.service.ScheduleFlushManager;
+import qunar.tc.qmq.backup.service.SyncLogIterator;
+import qunar.tc.qmq.backup.service.impl.ActionSyncLogIterator;
+import qunar.tc.qmq.backup.service.impl.DbDicService;
+import qunar.tc.qmq.backup.service.impl.DeadMessageBatchBackup;
+import qunar.tc.qmq.backup.service.impl.DeadRecordBatchBackup;
+import qunar.tc.qmq.backup.service.impl.IndexEventBusListener;
+import qunar.tc.qmq.backup.service.impl.IndexFileStore;
+import qunar.tc.qmq.backup.service.impl.MessageIndexBatchBackup;
+import qunar.tc.qmq.backup.service.impl.MessageServiceImpl;
+import qunar.tc.qmq.backup.service.impl.RecordBatchBackup;
+import qunar.tc.qmq.backup.store.DicStore;
+import qunar.tc.qmq.backup.store.KvStore;
+import qunar.tc.qmq.backup.store.MessageStore;
+import qunar.tc.qmq.backup.store.RecordStore;
+import qunar.tc.qmq.backup.store.RocksDBStore;
 import qunar.tc.qmq.backup.store.impl.DbDicDao;
 import qunar.tc.qmq.backup.store.impl.FactoryStoreImpl;
 import qunar.tc.qmq.backup.store.impl.RocksDBStoreImpl;
@@ -40,19 +67,18 @@ import qunar.tc.qmq.configuration.DynamicConfig;
 import qunar.tc.qmq.meta.BrokerRegisterService;
 import qunar.tc.qmq.meta.BrokerRole;
 import qunar.tc.qmq.meta.MetaServerLocator;
-import qunar.tc.qmq.store.*;
+import qunar.tc.qmq.store.Action;
+import qunar.tc.qmq.store.CheckpointManager;
+import qunar.tc.qmq.store.IndexLog;
+import qunar.tc.qmq.store.LogIterateService;
+import qunar.tc.qmq.store.MessageQueryIndex;
+import qunar.tc.qmq.store.StorageConfig;
+import qunar.tc.qmq.store.StorageConfigImpl;
 import qunar.tc.qmq.store.event.FixedExecOrderEventBus;
 import qunar.tc.qmq.sync.MasterSlaveSyncManager;
 import qunar.tc.qmq.sync.SlaveSyncClient;
 import qunar.tc.qmq.sync.SyncType;
 import qunar.tc.qmq.utils.NetworkUtils;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-
-import static qunar.tc.qmq.backup.service.DicService.SIX_DIGIT_FORMAT_PATTERN;
-import static qunar.tc.qmq.constants.BrokerConstants.*;
 
 public class ServerWrapper implements Disposable {
     private static final Logger LOG = LoggerFactory.getLogger(ServerWrapper.class);
@@ -85,7 +111,7 @@ public class ServerWrapper implements Disposable {
             final MetaServerLocator metaServerLocator = new MetaServerLocator(localConfig.getString(META_SERVER_ENDPOINT));
             BrokerRegisterService brokerRegisterService = new BrokerRegisterService(listenPort, metaServerLocator);
             brokerRegisterService.start();
-            if (BrokerConfig.getBrokerRole() != BrokerRole.BACKUP) {
+			if (BrokerConfig.getBrokerRole() != BrokerRole.BACKUP) {
                 LOG.error("Config error,({})'s role is not backup.", NetworkUtils.getLocalHostname());
                 throw new IllegalArgumentException("Config error, the role is not backup");
             }
@@ -98,45 +124,42 @@ public class ServerWrapper implements Disposable {
     }
 
     private void register(final DynamicConfig config) {
+        BrokerRole role = BrokerConfig.getBrokerRole();
+        if(role != BrokerRole.BACKUP) throw new RuntimeException("Only support backup");
+
         final SlaveSyncClient slaveSyncClient = new SlaveSyncClient(config);
         final MasterSlaveSyncManager masterSlaveSyncManager = new MasterSlaveSyncManager(slaveSyncClient);
 
         StorageConfig storageConfig = dummyConfig(config);
         final CheckpointManager checkpointManager = new CheckpointManager(BrokerConfig.getBrokerRole(), storageConfig, null);
+
         final FixedExecOrderEventBus bus = new FixedExecOrderEventBus();
-        BrokerRole role = BrokerConfig.getBrokerRole();
-        IndexLog log;
-        if (role == BrokerRole.BACKUP) {
-            final BackupKeyGenerator keyGenerator = new BackupKeyGenerator(dicService);
-            final KvStore.StoreFactory factory = new FactoryStoreImpl().createStoreFactory(config, dicService, keyGenerator);
-            this.indexStore = factory.createMessageIndexStore();
-            this.recordStore = factory.createRecordStore();
-            this.deadMessageStore = factory.createDeadMessageStore();
-            log = new IndexLog(storageConfig, checkpointManager);
-            final IndexLogSyncDispatcher dispatcher = new IndexLogSyncDispatcher(log);
+        final BackupKeyGenerator keyGenerator = new BackupKeyGenerator(dicService);
+        final KvStore.StoreFactory factory = new FactoryStoreImpl().createStoreFactory(config, dicService, keyGenerator);
+        this.indexStore = factory.createMessageIndexStore();
+        this.recordStore = factory.createRecordStore();
+        this.deadMessageStore = factory.createDeadMessageStore();
+        IndexLog log = new IndexLog(storageConfig, checkpointManager);
+        final IndexLogSyncDispatcher dispatcher = new IndexLogSyncDispatcher(log);
 
-            bus.subscribe(MessageQueryIndex.class, getConstructIndexListener(keyGenerator
-                    , messageQueryIndex -> log.setDeleteTo(messageQueryIndex.getCurrentOffset())));
-            masterSlaveSyncManager.registerProcessor(dispatcher.getSyncType(), new BackupMessageLogSyncProcessor(dispatcher));
+        FixedExecOrderEventBus.Listener<MessageQueryIndex> indexProcessor = getConstructIndexListener(keyGenerator
+                , messageQueryIndex -> log.commit(messageQueryIndex.getCurrentOffset()));
+        bus.subscribe(MessageQueryIndex.class, indexProcessor);
+        masterSlaveSyncManager.registerProcessor(dispatcher.getSyncType(), new BackupMessageLogSyncProcessor(dispatcher));
 
-            // action
-            final RocksDBStore rocksDBStore = new RocksDBStoreImpl(config);
-            final BatchBackup<ActionRecord> recordBackup = new RecordBatchBackup(this.config, keyGenerator, rocksDBStore, recordStore);
-            backupManager.registerBatchBackup(recordBackup);
-            final SyncLogIterator<Action, ByteBuf> actionIterator = new ActionSyncLogIterator();
-            BackupActionLogSyncProcessor actionLogSyncProcessor = new BackupActionLogSyncProcessor(checkpointManager, config, actionIterator, recordBackup);
-            masterSlaveSyncManager.registerProcessor(SyncType.action, actionLogSyncProcessor);
+        // action
+        final RocksDBStore rocksDBStore = new RocksDBStoreImpl(config);
+        final BatchBackup<ActionRecord> recordBackup = new RecordBatchBackup(this.config, keyGenerator, rocksDBStore, recordStore);
+        backupManager.registerBatchBackup(recordBackup);
+        final SyncLogIterator<Action, ByteBuf> actionIterator = new ActionSyncLogIterator();
+        BackupActionLogSyncProcessor actionLogSyncProcessor = new BackupActionLogSyncProcessor(checkpointManager, config, actionIterator, recordBackup);
+        masterSlaveSyncManager.registerProcessor(SyncType.action, actionLogSyncProcessor);
 
-            scheduleFlushManager.register(actionLogSyncProcessor);
+        scheduleFlushManager.register(actionLogSyncProcessor);
 
-            masterSlaveSyncManager.registerProcessor(SyncType.heartbeat, new HeartBeatProcessor(checkpointManager));
-        } else if (role == BrokerRole.DELAY_BACKUP) {
-            throw new RuntimeException("check the role is correct, only backup is allowed.");
-        } else {
-            throw new RuntimeException("check the role is correct, only backup is allowed.");
-        }
+        masterSlaveSyncManager.registerProcessor(SyncType.heartbeat, new HeartBeatProcessor(checkpointManager));
 
-        IndexLogIterateService iterateService = new IndexLogIterateService(config, log, checkpointManager, bus);
+        LogIterateService<MessageQueryIndex> iterateService = new LogIterateService<>("index", new StorageConfigImpl(config), log, checkpointManager.getIndexIterateCheckpoint(), bus);
         IndexFileStore indexFileStore = new IndexFileStore(log, config);
         scheduleFlushManager.register(indexFileStore);
 
@@ -146,7 +169,7 @@ public class ServerWrapper implements Disposable {
         backupManager.start();
         iterateService.start();
         masterSlaveSyncManager.startSync();
-        addResourcesInOrder(scheduleFlushManager, backupManager, iterateService, masterSlaveSyncManager);
+        addResourcesInOrder(scheduleFlushManager, backupManager, masterSlaveSyncManager);
     }
 
     public MessageService getMessageService() {

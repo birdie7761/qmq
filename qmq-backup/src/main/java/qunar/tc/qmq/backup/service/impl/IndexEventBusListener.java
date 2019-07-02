@@ -61,15 +61,15 @@ public class IndexEventBusListener implements FixedExecOrderEventBus.Listener<Me
         // handle message attributes
         if (RetrySubjectUtils.isDeadRetrySubject(index.getSubject())) {
             // additionally, generate a consume record
-            saveDeadMessage(index, consumer);
+            saveDeadMessage(index);
             return;
         }
         // indexBatchBackup
         indexBatchBackup.add(index, consumer);
     }
 
-    private void saveDeadMessage(MessageQueryIndex message, Consumer<MessageQueryIndex> consumer) {
-        deadMessageBatchBackup.add(message, consumer);
+    private void saveDeadMessage(MessageQueryIndex message) {
+        deadMessageBatchBackup.add(message, null);
         deadRecordBatchBackup.add(message, null);
     }
 
@@ -78,6 +78,6 @@ public class IndexEventBusListener implements FixedExecOrderEventBus.Listener<Me
     }
 
     private static void monitorConstructMessage(String subject) {
-        Metrics.meter("construct.message.qps",SUBJECT_ARRAY,new String[]{subject}).mark();
+        Metrics.meter("construct.message.qps", SUBJECT_ARRAY, new String[] {subject}).mark();
     }
 }

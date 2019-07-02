@@ -16,15 +16,7 @@
 
 package qunar.tc.qmq.store;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.CharMatcher;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import qunar.tc.qmq.monitor.QMon;
+import static com.google.common.base.CharMatcher.BREAKING_WHITESPACE;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,6 +24,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import qunar.tc.qmq.monitor.QMon;
 
 /**
  * @author keli.wang
@@ -66,11 +67,11 @@ public class ConsumerLogManager implements AutoCloseable {
                     continue;
                 }
 
-                final String subject = consumerLogDir.getName();
-                if (CharMatcher.BREAKING_WHITESPACE.matchesAnyOf(subject)) {
-                    LOG.error("consumer log directory name is invalid, skip. name: {}", subject);
-                    return;
-                }
+				final String subject = consumerLogDir.getName();
+				if (BREAKING_WHITESPACE.matchesAnyOf(subject)) {
+					LOG.error("consumer log directory name is invalid, skip. name: {}", subject);
+					continue;
+				}
                 final Long maxSequence = maxSequences.get(subject);
                 if (maxSequence == null) {
                     LOG.warn("cannot find max sequence for subject {} in checkpoint.", subject);
