@@ -17,6 +17,7 @@ package qunar.tc.qmq.producer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import io.opentracing.Scope;
 import io.opentracing.Tracer;
 import io.opentracing.util.GlobalTracer;
@@ -28,6 +29,9 @@ import qunar.tc.qmq.base.BaseMessage;
 import qunar.tc.qmq.common.ClientIdProvider;
 import qunar.tc.qmq.common.ClientIdProviderFactory;
 import qunar.tc.qmq.common.EnvProvider;
+import qunar.tc.qmq.metrics.Metrics;
+import qunar.tc.qmq.metrics.MetricsConstants;
+import qunar.tc.qmq.metrics.QmqTimer;
 import qunar.tc.qmq.producer.idgenerator.IdGenerator;
 import qunar.tc.qmq.producer.idgenerator.TimestampAndHostIdGenerator;
 import qunar.tc.qmq.producer.sender.NettyRouterManager;
@@ -36,6 +40,8 @@ import qunar.tc.qmq.tracing.TraceUtil;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -117,25 +123,51 @@ public class MessageProducerProvider implements MessageProducer {
         if (!STARTED.get()) {
             throw new RuntimeException("MessageProducerProvider未初始化，如果使用非Spring的方式请确认init()是否调用");
         }
-        try (Scope ignored = tracer.buildSpan("Qmq.Produce.Send")
+
+
+        String[] tagValues = null;
+        long startTime = System.currentTimeMillis();
+        Tracer.SpanBuilder spanBuilder = tracer.buildSpan("Qmq.Produce.Send")
                 .withTag("appCode", appCode)
                 .withTag("subject", message.getSubject())
-                .withTag("messageId", message.getMessageId())
-                .startActive(true)) {
+                .withTag("messageId", message.getMessageId());
+        Scope scope = null;
+        try {
             if (messageTracker == null) {
                 message.setDurable(false);
             }
 
             ProduceMessageImpl pm = initProduceMessage(message, listener);
             if (!message.isDurable()) {
+                spanBuilder.withTag("messageType", "NormalMessage");
+                scope = spanBuilder.startActive(true);
+
+                tagValues = new String[]{message.getSubject(), "NormalMessage"};
                 pm.send();
                 return;
             }
 
             if (!messageTracker.trackInTransaction(pm)) {
+                spanBuilder.withTag("messageType", "PersistenceMessage");
+                scope = spanBuilder.startActive(true);
+
+                tagValues = new String[]{message.getSubject(), "PersistenceMessage"};
                 pm.send();
+            } else {
+                spanBuilder.withTag("messageType", "TransactionMessage");
+                scope = spanBuilder.startActive(true);
+
+                tagValues = new String[]{message.getSubject(), "TransactionMessage"};
             }
 
+
+        } finally {
+            QmqTimer timer = Metrics.timer("qmq_client_producer_send_message_time", MetricsConstants.SUBJECT_AND_TYPE_ARRAY, tagValues);
+            timer.update(System.currentTimeMillis() - startTime, TimeUnit.MILLISECONDS);
+
+            if (scope != null) {
+                scope.close();
+            }
         }
     }
 

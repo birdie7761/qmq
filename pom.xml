@@ -5,7 +5,7 @@
 
     <groupId>com.qunar.qmq</groupId>
     <artifactId>qmq-parent</artifactId>
-    <version>1.1.5</version>
+    <version>1.1.14</version>
     <packaging>pom</packaging>
 
     <name>qmq</name>
@@ -90,6 +90,8 @@
         <slf4j.version>1.7.25</slf4j.version>
         <logback.version>1.2.3</logback.version>
         <async.hbaseclient.version>1.7.2</async.hbaseclient.version>
+        <powermock.version>1.7.4</powermock.version>
+        <powermock-api-mockito2.version>2.0.0</powermock-api-mockito2.version>
     </properties>
 
     <dependencyManagement>
@@ -214,7 +216,7 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
-                <version>4.0.36.Final</version>
+                <version>4.0.46.Final</version>
             </dependency>
 
             <dependency>
@@ -300,6 +302,34 @@
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
                 <version>4.12</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>2.23.4</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.powermock</groupId>
+                <artifactId>powermock-module-junit4</artifactId>
+                <version>${powermock.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.powermock</groupId>
+                <artifactId>powermock-api-mockito2</artifactId>
+                <version>${powermock-api-mockito2.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.powermock</groupId>
+                <artifactId>powermock-core</artifactId>
+                <version>${powermock.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
@@ -417,6 +447,10 @@
             <id>release</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>

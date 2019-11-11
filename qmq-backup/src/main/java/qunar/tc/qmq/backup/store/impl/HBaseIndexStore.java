@@ -29,7 +29,7 @@ import java.util.Date;
  * @author xufeng.deng dennisdxf@gmail.com
  * @since 2019/5/29
  */
-public class HBaseIndexStore extends AbstractHBaseMessageStore {
+public class HBaseIndexStore extends AbstractHBaseMessageStore<MessageQueryResult.MessageMeta> {
     private DicService dicService;
 
     HBaseIndexStore(byte[] table, byte[] family, byte[][] qualifiers, HBaseClient client, DicService dicService) {
@@ -43,7 +43,7 @@ public class HBaseIndexStore extends AbstractHBaseMessageStore {
         final Date msgCreateTimeBegin = query.getMsgCreateTimeBegin();
         final Date msgCreateTimeEnd = query.getMsgCreateTimeEnd();
         final int len = query.getLen();
-        final String start = (String) query.getStart();
+        final String start = query.getStart();
         final String messageId = query.getMessageId();
         String subjectId;
         byte[] table;

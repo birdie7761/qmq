@@ -54,67 +54,59 @@ public class MessageIndexSyncWorker extends AbstractLogSyncWorker {
         }
 
         try (MessageLogRecordVisitor visitor = storage.newMessageLogVisitor(startSyncOffset)) {
-            LogSegment logSegment = null;
+            LogSegment currentSegment = null;
             ByteBuf byteBuf = ByteBufAllocator.DEFAULT.ioBuffer(batchSize);
-            long nextSyncOffset = startSyncOffset;
+            long nextSyncOffset = originalOffset;
             try {
                 for (int i = 0; i < MAX_SYNC_NUM; ++i) {
                     LogVisitorRecord<MessageLogRecord> record = visitor.nextRecord();
+
                     if (record.isNoMore()) {
                         nextSyncOffset = visitor.getStartOffset() + visitor.visitedBufferSize();
                         break;
                     }
-
                     if (!record.hasData()) {
                         nextSyncOffset = visitor.getStartOffset() + visitor.visitedBufferSize();
                         continue;
                     }
 
                     MessageLogRecord data = record.getData();
-                    logSegment = data.getLogSegment();
+                    currentSegment = data.getLogSegment();
 
-                    if (!byteBuf.isWritable(Long.BYTES)) break;
                     byteBuf.markWriterIndex();
-                    byteBuf.writeLong(data.getSequence());
 
-                    if (!byteBuf.isWritable(Long.BYTES)) {
-                        byteBuf.resetWriterIndex();
-                        break;
-                    }
+                    //sequence
+                    if (!writeLong(data.getSequence(), byteBuf)) break;
 
                     ByteBuffer body = data.getPayload();
                     //skip flag
                     body.get();
-                    long createTime = body.getLong();
+
+                    //create time
+                    if (!writeLong(body.getLong(), byteBuf)) break;
+
                     //skip expireTime
                     body.getLong();
 
                     //subject
-                    short len = body.getShort();
-                    byte[] subject = new byte[len];
-                    body.get(subject);
+                    Control control = copyString(body, byteBuf);
+                    if (control == Control.INVALID) {
+                        nextSyncOffset = visitor.getStartOffset() + visitor.visitedBufferSize();
+                        continue;
+                    }
+                    if (control == Control.NOSPACE) break;
 
                     //message id
-                    len = body.getShort();
-                    byte[] messageId = new byte[len];
-                    body.get(messageId);
-
-                    byteBuf.writeLong(createTime);
-
-                    if (!byteBuf.isWritable(Short.BYTES + subject.length)) {
-                        byteBuf.resetWriterIndex();
-                        break;
+                    control = copyString(body, byteBuf);
+                    if (control == Control.INVALID) {
+                        nextSyncOffset = visitor.getStartOffset() + visitor.visitedBufferSize();
+                        continue;
                     }
-                    PayloadHolderUtils.writeString(subject, byteBuf);
-
-                    if (!byteBuf.isWritable(Short.BYTES + messageId.length)) {
-                        byteBuf.resetWriterIndex();
-                        break;
-                    }
-                    PayloadHolderUtils.writeString(messageId, byteBuf);
+                    if (control == Control.NOSPACE) break;
 
                     nextSyncOffset = visitor.getStartOffset() + visitor.visitedBufferSize();
                 }
+
             } finally {
                 if (!byteBuf.isReadable()) {
                     byteBuf.release();
@@ -127,11 +119,42 @@ public class MessageIndexSyncWorker extends AbstractLogSyncWorker {
 
             //FIXME: 这里完全是为了避免父类里做超时处理
             if (byteBuf.isReadable()) {
-                return new ByteBufSegmentBuffer(nextSyncOffset, logSegment, byteBuf, byteBuf.readableBytes());
+                return new ByteBufSegmentBuffer(nextSyncOffset, currentSegment, byteBuf, byteBuf.readableBytes());
             } else {
                 return new ByteBufSegmentBuffer(nextSyncOffset);
             }
         }
+    }
+
+    private boolean writeLong(long value, ByteBuf to) {
+        if (!to.isWritable(Long.BYTES)) {
+            to.resetWriterIndex();
+            return false;
+        }
+        to.writeLong(value);
+        return true;
+    }
+
+    private enum Control {
+        NOSPACE,
+        INVALID,
+        OK
+    }
+
+    private Control copyString(ByteBuffer from, ByteBuf to) {
+        short len = from.getShort();
+        if (len <= 0) {
+            to.resetWriterIndex();
+            return Control.INVALID;
+        }
+        byte[] str = new byte[len];
+        from.get(str);
+        if (!to.isWritable(Short.BYTES + len)) {
+            to.resetWriterIndex();
+            return Control.NOSPACE;
+        }
+        PayloadHolderUtils.writeString(str, to);
+        return Control.OK;
     }
 
     private static class ByteBufSegmentBuffer extends SegmentBuffer {

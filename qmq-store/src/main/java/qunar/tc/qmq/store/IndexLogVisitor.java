@@ -35,14 +35,15 @@ public class IndexLogVisitor extends AbstractLogVisitor<MessageQueryIndex> {
     protected LogVisitorRecord<MessageQueryIndex> readOneRecord(SegmentBuffer segmentBuffer) {
         final ByteBuffer buffer = segmentBuffer.getBuffer();
         final int startPos = buffer.position();
-        // magic
+
+        // sequence
         if (buffer.remaining() < Long.BYTES) {
-            //end of file
             return retNoMore();
         }
 
         // sequence
         long sequence = buffer.getLong();
+        //小于零表示到了文件末尾，全部是填充数据
         if (sequence < 0) {
             return retNoMore();
         }
@@ -83,4 +84,5 @@ public class IndexLogVisitor extends AbstractLogVisitor<MessageQueryIndex> {
         setVisitedBufferSize(getBufferSize());
         return LogVisitorRecord.noMore();
     }
+
 }

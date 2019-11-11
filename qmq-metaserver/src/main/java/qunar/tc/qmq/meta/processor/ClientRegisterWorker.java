@@ -39,6 +39,7 @@ import qunar.tc.qmq.protocol.consumer.MetaInfoResponse;
 import qunar.tc.qmq.util.RemotingBuilder;
 import qunar.tc.qmq.utils.PayloadHolderUtils;
 import qunar.tc.qmq.utils.RetrySubjectUtils;
+import qunar.tc.qmq.utils.SubjectUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +49,7 @@ import java.util.List;
  * @since 2017/9/1
  */
 class ClientRegisterWorker implements ActorSystem.Processor<ClientRegisterProcessor.ClientRegisterMessage> {
-    private static final Logger LOG = LoggerFactory.getLogger(ClientRegisterProcessor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ClientRegisterWorker.class);
 
     private final SubjectRouter subjectRouter;
     private final ActorSystem actorSystem;
@@ -79,6 +80,9 @@ class ClientRegisterWorker implements ActorSystem.Processor<ClientRegisterProces
 
     private MetaInfoResponse handleClientRegister(final MetaInfoRequest request) {
         final String realSubject = RetrySubjectUtils.getRealSubject(request.getSubject());
+        if (SubjectUtils.isInValid(realSubject)) {
+            return buildResponse(request, -2, OnOfflineState.OFFLINE, new BrokerCluster(new ArrayList<>()));
+        }
         final int clientRequestType = request.getRequestType();
 
         try {
